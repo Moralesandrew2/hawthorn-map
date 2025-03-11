@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { GoogleMap, LoadScript, Marker, InfoWindow } from '@react-google-maps/api';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { GoogleMap, useLoadScript, Marker, InfoWindow } from '@react-google-maps/api';
 
 const containerStyle = {
   width: '100%',
@@ -12,48 +12,58 @@ const center = {
 };
 
 function MapComponent() {
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY,
+  });
+
+  
+
+
   const [address, setAddress] = useState('');
   const [markers, setMarkers] = useState([]);
   const [selectedMarker, setSelectedMarker] = useState(null);
-
+  
   const mapRef = useRef(null);
-  const geocoder = useRef(null);
+  const geocoderRef = useRef(null);
 
   useEffect(() => {
-    // Initialize geocoder when the component mounts
-    geocoder.current = new window.google.maps.Geocoder();
+    if (window.google) {
+      geocoderRef.current = new window.google.maps.Geocoder();
+    }
   }, []);
 
-  const geocodeAddress = () => {
-    if (address === '') return;
+  const handleMapLoad = useCallback((map) => {
+    mapRef.current = map;
+  }, []);
 
-    geocoder.current.geocode({ address }, (results, status) => {
-      if (status === 'OK') {
+  const geocodeAddress = useCallback(() => {
+    if (!geocoderRef.current || address.trim() === '') return;
+
+    geocoderRef.current.geocode({ address }, (results, status) => {
+      if (status === 'OK' && results[0]) {
         const location = results[0].geometry.location;
         mapRef.current.panTo(location);
         mapRef.current.setZoom(14);
 
-        const newMarker = {
-          position: location,
-          address: address
-        };
-
-        setMarkers((prevMarkers) => [...prevMarkers, newMarker]);
+        setMarkers((prev) => [...prev, { position: location, address }]);
       } else {
-        alert(`Geocode was not successful: ${status}`);
+        alert(`Geocode failed: ${status}`);
       }
     });
-  };
+  }, [address]);
 
-  const removeMarker = (index) => {
-    setMarkers((prevMarkers) => prevMarkers.filter((_, i) => i !== index));
+  const removeMarker = useCallback((index) => {
+    setMarkers((prev) => prev.filter((_, i) => i !== index));
     setSelectedMarker(null);
-  };
+  }, []);
 
-  const clearMarkers = () => {
+  const clearMarkers = useCallback(() => {
     setMarkers([]);
     setSelectedMarker(null);
-  };
+  }, []);
+
+  if (loadError) return <p>Error loading maps</p>;
+  if (!isLoaded) return <p>Loading maps...</p>;
 
   return (
     <div>
@@ -67,37 +77,34 @@ function MapComponent() {
       <button onClick={geocodeAddress}>Show on Map</button>
       <button onClick={clearMarkers}>Clear All Markers</button>
 
-      <LoadScript key={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}>
-        <GoogleMap
-          id="map"
-          mapContainerStyle={containerStyle}
-          center={center}
-          zoom={12}
-          onLoad={(map) => (mapRef.current = map)}
-        >
-          {markers.map((marker, index) => (
-            <Marker
-              key={index}
-              position={marker.position}
-              onClick={() => setSelectedMarker(marker)}
-            />
-          ))}
+      <GoogleMap
+        mapContainerStyle={containerStyle}
+        center={center}
+        zoom={12}
+        onLoad={handleMapLoad}
+      >
+        {markers.map((marker, index) => (
+          <Marker
+            key={index}
+            position={marker.position}
+            onClick={() => setSelectedMarker(marker)}
+          />
+        ))}
 
-          {selectedMarker && (
-            <InfoWindow
-              position={selectedMarker.position}
-              onCloseClick={() => setSelectedMarker(null)}
-            >
-              <div>
-                <p><strong>{selectedMarker.address}</strong></p>
-                <button onClick={() => removeMarker(markers.indexOf(selectedMarker))}>
-                  Remove Marker
-                </button>
-              </div>
-            </InfoWindow>
-          )}
-        </GoogleMap>
-      </LoadScript>
+        {selectedMarker && (
+          <InfoWindow
+            position={selectedMarker.position}
+            onCloseClick={() => setSelectedMarker(null)}
+          >
+            <div>
+              <p><strong>{selectedMarker.address}</strong></p>
+              <button onClick={() => removeMarker(markers.indexOf(selectedMarker))}>
+                Remove Marker
+              </button>
+            </div>
+          </InfoWindow>
+        )}
+      </GoogleMap>
     </div>
   );
 }

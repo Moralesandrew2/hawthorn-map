@@ -1,0 +1,10 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/hawthorn-maps/hawthorn-react-app', '.']
+  env:
+    - 'REACT_APP_GOOGLE_MAPS_API_KEY=${_REACT_APP_GOOGLE_MAPS_API_KEY}'
+images:
+- 'gcr.io/hawthorn-maps/hawthorn-react-app'
+substitutions:
+  _REACT_APP_GOOGLE_MAPS_API_KEY: 'AIzaSyBn0zGUjcigj_j4HXQKaVnAwFP5G2VvJpk'
+

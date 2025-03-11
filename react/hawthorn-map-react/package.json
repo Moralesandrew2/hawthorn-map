@@ -2,6 +2,7 @@
   "name": "hawthorn-map",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://localhost:8080",
   "dependencies": {
     "@react-google-maps/api": "^2.20.6",
     "@testing-library/dom": "^10.4.0",
