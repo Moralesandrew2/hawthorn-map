@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleMap, useLoadScript, Marker, InfoWindow } from '@react-google-maps/api';
 import axios from 'axios';
-import logo from '../assets/logo.png'; // Import the logo
+import logo from '../assets/logo.png';
 
 const containerStyle = {
   width: '100%',
@@ -177,7 +177,6 @@ function MapComponent() {
   );
 }
 
-// Inline styles for now (we'll move to CSS later if preferred)
 const styles = {
   pageContainer: {
     fontFamily: "'Roboto', sans-serif",
@@ -261,7 +260,6 @@ const styles = {
   },
 };
 
-// Add hover/focus effects via CSS
 const styleSheet = document.createElement('style');
 styleSheet.innerText = `
   input:focus {
