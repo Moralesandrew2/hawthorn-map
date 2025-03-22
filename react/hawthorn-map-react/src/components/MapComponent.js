@@ -88,8 +88,18 @@ function MapComponent() {
     setSelectedMarker(null);
   }, []);
 
-  const clearMarkers = useCallback(() => {
+  const clearManualMarkers = useCallback(() => {
     setMarkers((prev) => prev.filter((marker) => marker.isFromBackend));
+    setSelectedMarker(null);
+  }, []);
+
+  const clearFlippedHomes = useCallback(() => {
+    setMarkers((prev) => prev.filter((marker) => !marker.isFromBackend));
+    setSelectedMarker(null);
+  }, []);
+
+  const clearAllMarkers = useCallback(() => {
+    setMarkers([]);
     setSelectedMarker(null);
   }, []);
 
@@ -124,8 +134,14 @@ function MapComponent() {
           <button onClick={fetchHomes} style={styles.button}>
             Load Flipped Homes
           </button>
-          <button onClick={clearMarkers} style={styles.button}>
+          <button onClick={clearManualMarkers} style={styles.button}>
             Clear Manual Markers
+          </button>
+          <button onClick={clearFlippedHomes} style={styles.button}>
+            Clear Flipped Homes
+          </button>
+          <button onClick={clearAllMarkers} style={styles.button}>
+            Clear All Markers
           </button>
         </div>
       </div>
