@@ -9,7 +9,7 @@ const containerStyle = {
 };
 
 const center = {
-  lat: 32.7157,
+  lat: 32.7157, // San Diego
   lng: -117.1611,
 };
 
@@ -21,6 +21,18 @@ function MapComponent() {
   const [address, setAddress] = useState('');
   const [markers, setMarkers] = useState([]);
   const [selectedMarker, setSelectedMarker] = useState(null);
+  const [showCompForm, setShowCompForm] = useState(false);
+  const [compData, setCompData] = useState({
+    address: '',
+    bedCount: '',
+    bathCount: '',
+    squareFootage: '',
+    yearBuilt: '',
+    arv: '',
+  });
+
+  
+  const [selectedRange, setSelectedRange] = useState('all');
 
   const mapRef = useRef(null);
   const geocoderRef = useRef(null);
@@ -40,6 +52,30 @@ function MapComponent() {
     mapRef.current = map;
   }, []);
 
+  const fetchComps = useCallback(async () => {
+    try {
+      const res = await axios.get(`${backendUrl}/api/comps`);
+      const compMarkers = res.data.map((comp) => ({
+        position: { lat: comp.lat, lng: comp.lng },
+        address: comp.address,
+        bedCount: comp.bedCount,
+        bathCount: comp.bathCount,
+        squareFootage: comp.squareFootage,
+        yearBuilt: comp.yearBuilt,
+        arv: comp.arv,
+        isFromBackend: true,
+        isComp: true, // Distinguish comps
+      }));
+      setMarkers((prev) => [
+        ...prev.filter((marker) => !marker.isComp), // Remove existing comps to avoid duplicates
+        ...compMarkers,
+      ]);
+    } catch (err) {
+      console.error('Error fetching comps:', err);
+      alert('Failed to fetch comps');
+    }
+  }, [backendUrl]);
+
   const geocodeAddress = useCallback(() => {
     if (!isLoaded || !geocoderRef.current || address.trim() === '') {
       console.warn('Geocoder not ready or address is empty');
@@ -53,7 +89,10 @@ function MapComponent() {
         };
         mapRef.current.panTo(location);
         mapRef.current.setZoom(14);
-        setMarkers((prev) => [...prev, { position: location, address, isFromBackend: false }]);
+        setMarkers((prev) => [
+          ...prev,
+          { position: location, address, isFromBackend: false, isComp: false },
+        ]);
         setAddress('');
       } else {
         alert(`Geocode failed: ${status}`);
@@ -61,27 +100,42 @@ function MapComponent() {
     });
   }, [address, isLoaded]);
 
-  const fetchHomes = useCallback(async () => {
-    if (!isLoaded) {
-      console.warn('Google Maps not loaded yet');
-      return;
-    }
-    try {
-      const response = await axios.get(`${backendUrl}/api/homes`);
-      const homes = response.data.map((home) => ({
-        position: { lat: home.lat, lng: home.lng },
-        address: home.address,
-        salesPrice: home.salesPrice,
-        soldDate: home.soldDate,
-        link: home.link,
-        isFromBackend: true,
-      }));
-      setMarkers((prev) => [...prev, ...homes]);
-    } catch (error) {
-      console.error('Error fetching homes from backend:', error);
-      alert('Failed to fetch homes from backend');
-    }
-  }, [isLoaded, backendUrl]);
+  const fetchHomes = useCallback(
+    async (range = 'all') => {
+      if (!isLoaded) {
+        console.warn('Google Maps not loaded yet');
+        return;
+      }
+  
+      try {
+        const response = await axios.get(`${backendUrl}/api/homes`, {
+          params: { range },
+        });
+  
+        const homes = response.data.map((home) => ({
+          position: { lat: home.lat, lng: home.lng },
+          address: home.address,
+          salesPrice: home.salesPrice,
+          soldDate: home.soldDate,
+          link: home.link,
+          isFromBackend: true,
+          isComp: false,
+        }));
+  
+        setMarkers((prev) => [
+          ...prev.filter((marker) => !marker.isFromBackend || marker.isComp),
+          ...homes,
+        ]);
+      } catch (error) {
+        console.error('Error fetching homes from backend:', error);
+        alert('Failed to fetch homes from backend');
+      }
+    },
+    [isLoaded, backendUrl]
+  );
+  
+
+  
 
   const removeMarker = useCallback((index) => {
     setMarkers((prev) => prev.filter((_, i) => i !== index));
@@ -94,7 +148,7 @@ function MapComponent() {
   }, []);
 
   const clearFlippedHomes = useCallback(() => {
-    setMarkers((prev) => prev.filter((marker) => !marker.isFromBackend));
+    setMarkers((prev) => prev.filter((marker) => !marker.isFromBackend || marker.isComp));
     setSelectedMarker(null);
   }, []);
 
@@ -131,9 +185,19 @@ function MapComponent() {
           <button onClick={geocodeAddress} style={styles.button}>
             Show on Map
           </button>
-          <button onClick={fetchHomes} style={styles.button}>
+          <button onClick={() => fetchHomes(selectedRange)} style={styles.button}>
             Load Flipped Homes
           </button>
+          <select
+            value={selectedRange}
+            onChange={(e) => setSelectedRange(e.target.value)}
+            style={{ marginRight: '0.5rem' }}
+          >
+            <option value="all">All Time</option>
+            <option value="6months">Last 6 Months</option>
+            <option value="1year">Last 1 Year</option>
+            <option value="2years">Last 2 Years</option>
+          </select>
           <button onClick={clearManualMarkers} style={styles.button}>
             Clear Manual Markers
           </button>
@@ -143,52 +207,201 @@ function MapComponent() {
           <button onClick={clearAllMarkers} style={styles.button}>
             Clear All Markers
           </button>
+          <button onClick={() => setShowCompForm(true)} style={styles.button}>
+            Save Analyzed Home
+          </button>
+          <button onClick={fetchComps} style={styles.button}>
+            Load Recent Analyzed Homes
+          </button>
         </div>
       </div>
+      <div style={{ position: 'relative', height: '100%' }}></div>
+      <div style={{ width: '100%', height: '500px', position: 'relative' }}>
+        <div style={{
+          position: 'absolute',
+          top: 10,
+          left: 10,
+          backgroundColor: 'white',
+          padding: '8px 12px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+          zIndex: 10
+        }}>
+          <h4 style={{ margin: '0 0 6px' }}>Legend</h4>
+          <div><span style={{ color: 'blue', fontWeight: 'bold' }}>●</span> Flipped Homes</div>
+          <div><span style={{ color: 'green', fontWeight: 'bold' }}>●</span> Recently Analyzed</div>
+          <div><span style={{ color: 'red', fontWeight: 'bold' }}>●</span> Manual Marker</div>
+        </div>
+      
+        {/* Map */}
+        <GoogleMap
+          mapContainerStyle={containerStyle}
+          center={center}
+          zoom={12}
+          onLoad={handleMapLoad}
+        >
+          {markers.map((marker, index) => (
+            <Marker
+              key={index}
+              position={marker.position}
+              onClick={() => setSelectedMarker(marker)}
+              icon={
+                marker.isFromBackend
+                  ? {
+                      url: marker.isComp
+                        ? 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
+                        : 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+                    }
+                  : undefined
+              }
+              title={marker.address}
+            />
+          ))}
+          {selectedMarker && (
+            <InfoWindow
+              position={selectedMarker.position}
+              onCloseClick={() => setSelectedMarker(null)}
+            >
+              <div style={styles.infoWindow}>
+                <p>
+                  <strong>Address:</strong> {selectedMarker.address}
+                </p>
+                {selectedMarker.isFromBackend && !selectedMarker.isComp && (
+                  <>
+                    <p>
+                      <strong>Sales Price:</strong>{' '}
+                      {selectedMarker.salesPrice
+                        ? `$${selectedMarker.salesPrice.toLocaleString()}`
+                        : 'N/A'}
+                    </p>
+                    <p>
+                      <strong>Sold Date:</strong>{' '}
+                      {selectedMarker.soldDate
+                        ? new Date(selectedMarker.soldDate).toLocaleDateString()
+                        : 'N/A'}
+                    </p>
+                    <p>
+                      <strong>Link:</strong>{' '}
+                      <a
+                        href={selectedMarker.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        View on Redfin
+                      </a>
+                    </p>
+                  </>
+                )}
+                {selectedMarker.isFromBackend && selectedMarker.isComp && (
+                  <>
+                    <p>
+                      <strong>Beds:</strong> {selectedMarker.bedCount || 'N/A'}
+                    </p>
+                    <p>
+                      <strong>Baths:</strong> {selectedMarker.bathCount || 'N/A'}
+                    </p>
+                    <p>
+                      <strong>Square Footage:</strong>{' '}
+                      {selectedMarker.squareFootage
+                        ? `${selectedMarker.squareFootage.toLocaleString()} sq ft`
+                        : 'N/A'}
+                    </p>
+                    <p>
+                      <strong>Year Built:</strong> {selectedMarker.yearBuilt || 'N/A'}
+                    </p>
+                    <p>
+                      <strong>Lot Size:</strong>{' '}
+                      {selectedMarker.lotSize
+                        ? `${selectedMarker.lotSize.toLocaleString()} sq ft`
+                        : 'N/A'}
+                    </p>
+                    <p>
+                      <strong>ARV:</strong>{' '}
+                      {selectedMarker.arv
+                        ? `$${selectedMarker.arv.toLocaleString()}`
+                        : 'N/A'}
+                    </p>
+                  </>
+                )}
+                {!selectedMarker.isFromBackend && (
+                  <button
+                    onClick={() => removeMarker(markers.indexOf(selectedMarker))}
+                    style={styles.infoWindowButton}
+                  >
+                    Remove Marker
+                  </button>
+                )}
+              </div>
+            </InfoWindow>
+          )}
+        </GoogleMap>
+      </div>
 
-      {/* Map */}
-      <GoogleMap
-        mapContainerStyle={containerStyle}
-        center={center}
-        zoom={12}
-        onLoad={handleMapLoad}
-      >
-        {markers.map((marker, index) => (
-          <Marker
-            key={index}
-            position={marker.position}
-            onClick={() => setSelectedMarker(marker)}
-            icon={
-              marker.isFromBackend
-                ? 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-                : undefined
-            }
-          />
-        ))}
-
-        {selectedMarker && (
-          <InfoWindow
-            position={selectedMarker.position}
-            onCloseClick={() => setSelectedMarker(null)}
-          >
-            <div style={styles.infoWindow}>
-              <p><strong>Address:</strong> {selectedMarker.address}</p>
-              {selectedMarker.isFromBackend && (
-                <>
-                  <p><strong>Sales Price:</strong> {selectedMarker.salesPrice}</p>
-                  <p><strong>Sold Date:</strong> {selectedMarker.soldDate}</p>
-                  <p><strong>Link:</strong> <a href={selectedMarker.link} target="_blank" rel="noopener noreferrer">View on Redfin</a></p>
-                </>
-              )}
-              {!selectedMarker.isFromBackend && (
-                <button onClick={() => removeMarker(markers.indexOf(selectedMarker))} style={styles.infoWindowButton}>
-                  Remove Marker
-                </button>
-              )}
+      {/* Comp Form Modal */}
+      {showCompForm && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h2 style={styles.modalTitle}>Save an Analyzed Home</h2>
+            {Object.keys(compData).map((field) => (
+              <div key={field} style={styles.formGroup}>
+                <label style={styles.label}>
+                  {field
+                    .replace(/([A-Z])/g, ' $1')
+                    .replace(/^./, (str) => str.toUpperCase())}
+                </label>
+                <input
+                  type={field === 'address' ? 'text' : 'number'}
+                  value={compData[field]}
+                  onChange={(e) =>
+                    setCompData({ ...compData, [field]: e.target.value })
+                  }
+                  style={styles.input}
+                  placeholder={``}
+                />
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                style={{ ...styles.button, backgroundColor: '#2ecc71' }}
+                onClick={async () => {
+                  try {
+                    await axios.post(`${backendUrl}/api/comps`, {
+                      ...compData,
+                      bedCount: Number(compData.bedCount) || undefined,
+                      bathCount: Number(compData.bathCount) || undefined,
+                      squareFootage: Number(compData.squareFootage) || undefined,
+                      yearBuilt: Number(compData.yearBuilt) || undefined,
+                      arv: Number(compData.arv) || undefined,
+                    });
+                    alert('Analyzed Home Saved!');
+                    setShowCompForm(false);
+                    setCompData({
+                      address: '',
+                      bedCount: '',
+                      bathCount: '',
+                      squareFootage: '',
+                      yearBuilt: '',
+                      arv: '',
+                    });
+                    fetchComps(); // Refresh comps after saving
+                  } catch (err) {
+                    console.error('Error saving comp:', err);
+                    alert('Error saving home data. Please try again.');
+                  }
+                }}
+              >
+                Save
+              </button>
+              <button
+                style={{ ...styles.button, backgroundColor: '#e74c3c' }}
+                onClick={() => setShowCompForm(false)}
+              >
+                Cancel
+              </button>
             </div>
-          </InfoWindow>
-        )}
-      </GoogleMap>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -263,6 +476,7 @@ const styles = {
   infoWindow: {
     fontSize: '0.9rem',
     color: '#333',
+    maxWidth: '200px',
   },
   infoWindowButton: {
     padding: '5px 10px',
@@ -273,6 +487,41 @@ const styles = {
     borderRadius: '3px',
     cursor: 'pointer',
     marginTop: '5px',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    padding: '20px',
+    borderRadius: '8px',
+    width: '90%',
+    maxWidth: '500px',
+    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.2)',
+  },
+  modalTitle: {
+    marginTop: 0,
+    marginBottom: '15px',
+    fontSize: '1.5rem',
+    textAlign: 'center',
+  },
+  formGroup: {
+    marginBottom: '10px',
+  },
+  label: {
+    display: 'block',
+    marginBottom: '5px',
+    color: '#555',
+    fontSize: '0.95rem',
   },
 };
 
