@@ -6,7 +6,6 @@ const compSchema = new mongoose.Schema({
     bathCount: Number,
     squareFootage: Number,
     yearBuilt: Number,
-    lotSize: Number,
     arv: Number,
     lat: Number,
     lng: Number
